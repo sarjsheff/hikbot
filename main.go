@@ -1,18 +1,18 @@
 package main
 
-// #cgo LDFLAGS: /hdd/hikutil/hiklib.o
+//// #cgo LDFLAGS: /hdd/hikutil/hiklib.o
 // #include <stdio.h>
 // #include <stdlib.h>
-// #include <hiklib.h>
+// #include "hiklib.h"
 // #include "hik.h"
 // #include <string.h>
 //
 // extern int onmessage(int command, char *sDVRIP, char *pBuf, unsigned int dwBufLen);
 //
 // static NET_DVR_ALARMINFO_V30 getalarminfo(char *pAlarmInfo) {
-//   NET_DVR_ALARMINFO_V30 struAlarmInfo;
-//   memcpy(&struAlarmInfo, pAlarmInfo, sizeof(NET_DVR_ALARMINFO_V30));
-//   return struAlarmInfo;
+//    NET_DVR_ALARMINFO_V30 struAlarmInfo;
+//    memcpy(&struAlarmInfo, pAlarmInfo, sizeof(NET_DVR_ALARMINFO_V30));
+//    return struAlarmInfo;
 // }
 //
 // static void OnAlarm(int user) {
