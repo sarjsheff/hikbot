@@ -26,6 +26,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 	"unsafe"
 
@@ -50,6 +51,12 @@ type AlarmItem struct {
 
 var motions chan AlarmItem
 
+type touser string
+
+func (t touser) Recipient() string {
+	return string(t)
+}
+
 //export onmessage
 func onmessage(command C.int, ip *C.char, data *C.char, ln C.uint) C.int {
 
@@ -70,7 +77,7 @@ func onmessage(command C.int, ip *C.char, data *C.char, ln C.uint) C.int {
 }
 
 func bot(user C.int, byStartChan C.int) {
-	var admin *tb.User
+	admin := touser(strconv.Itoa(*adminParam))
 	b, err := tb.NewBot(tb.Settings{
 		Token:  *tkeyParam,
 		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
@@ -81,29 +88,21 @@ func bot(user C.int, byStartChan C.int) {
 		return
 	}
 
-	b.Handle("/hello", func(m *tb.Message) {
-		if m.Sender.ID == *adminParam {
-			admin = m.Sender
-			b.Send(admin, "Registered!")
-		}
-	})
-
 	go func() {
 		for {
 			i := <-motions
 			if i.AlarmType == 3 {
 				fname := fmt.Sprintf("/tmp/%s.jpeg", i.IP)
 				C.HCaptureImage(user, byStartChan, C.CString(fname))
-				if admin != nil {
-					p := &tb.Photo{File: tb.FromDisk(fname)}
-					b.SendAlbum(admin, tb.Album{p})
-				}
+				p := &tb.Photo{File: tb.FromDisk(fname)}
+				b.SendAlbum(admin, tb.Album{p})
 			} else {
 				log.Println(i)
 			}
 		}
 	}()
 
+	b.Send(admin, "Bot restart!")
 	b.Start()
 }
 
