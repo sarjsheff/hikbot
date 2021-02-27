@@ -56,7 +56,7 @@ int HCaptureImage(int lUserID, int byStartChan, char *imagePath)
   int iRet;
   iRet = NET_DVR_CaptureJPEGPicture(lUserID, byStartChan, &strPicPara, imagePath);
   if (!iRet) {
-    return NET_DVR_GetLastError();
+    return 0-NET_DVR_GetLastError();
   }
   return iRet;
 }
@@ -68,13 +68,14 @@ BOOL CALLBACK OnMessage(int lCommand, char *sDVRIP, char *pBuf, DWORD dwBufLen)
 }
 
 int HListenAlarm(long lUserID,
+                 int alarmport,
                  int (*fMessCallBack)(int lCommand,
                                       char *sDVRIP,
                                       char *pBuf,
                                       unsigned int dwBufLen))  // BOOL(CALLBACK *fMessCallBack)(LONG lCommand, char *sDVRIP, char *pBuf, DWORD dwBufLen))
 {
   NET_DVR_SetDVRMessCallBack(fMessCallBack);
-  if (NET_DVR_StartListen(NULL, 7200)) {
+  if (NET_DVR_StartListen(NULL, alarmport)) {
     printf("Start listen\n");
     LONG m_alarmHandle = NET_DVR_SetupAlarmChan(lUserID);
     if (m_alarmHandle < -1) {
@@ -88,3 +89,9 @@ int HListenAlarm(long lUserID,
   }
 }
 
+int HReboot(int user) {
+    if (NET_DVR_RebootDVR(user) < 1) {
+        return 0 - NET_DVR_GetLastError();
+    }
+    return 1;
+}

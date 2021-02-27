@@ -15,8 +15,9 @@ package main
 //    return struAlarmInfo;
 // }
 //
-// static void OnAlarm(int user) {
-//   HListenAlarm(user,onmessage);
+// static void OnAlarm(int user,int alarmport) {
+//   printf("oalarm\n");
+//   HListenAlarm(user,alarmport,onmessage);
 // }
 // static void myprint(char* s) {
 //   printf("%s\n", s);
@@ -26,10 +27,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"time"
 	"unsafe"
 
+	"github.com/google/uuid"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
 
@@ -42,6 +45,7 @@ var userParam = flag.String("u", "", "Username.")
 var passParam = flag.String("p", "", "Password.")
 var tkeyParam = flag.String("t", "", "Telegram key.")
 var adminParam = flag.Int("a", 0, "Telegram userid.")
+var alarmParam = flag.Int("b", 7200, "Alarm port.")
 
 type AlarmItem struct {
 	IP        string
@@ -49,7 +53,11 @@ type AlarmItem struct {
 	AlarmType int
 }
 
+var appid uuid.UUID = uuid.Must(uuid.NewRandom())
+
 var motions chan AlarmItem
+var dev = C.DevInfo{byStartChan: 0}
+var user = C.int(-1)
 
 type touser string
 
@@ -76,7 +84,11 @@ func onmessage(command C.int, ip *C.char, data *C.char, ln C.uint) C.int {
 	return 1
 }
 
-func bot(user C.int, byStartChan C.int) {
+func bot() {
+
+	done := make(chan int, 1)
+	done <- 1
+
 	admin := touser(strconv.Itoa(*adminParam))
 	b, err := tb.NewBot(tb.Settings{
 		Token:  *tkeyParam,
@@ -88,14 +100,50 @@ func bot(user C.int, byStartChan C.int) {
 		return
 	}
 
+	snapshot := func() {
+		fname := fmt.Sprintf("/tmp/%s.jpeg", uuid.Must(uuid.NewRandom()).String())
+		err := C.HCaptureImage(user, dev.byStartChan, C.CString(fname))
+		if err > -1 {
+			p := &tb.Photo{File: tb.FromDisk(fname)}
+			b.SendAlbum(admin, tb.Album{p})
+			os.Remove(fname)
+		} else {
+			b.Send(admin, fmt.Sprintf("Error get snapshot [%d].", err))
+		}
+	}
+
+	b.Handle("/snap", func(m *tb.Message) {
+		<-done
+		if m.Sender.ID == *adminParam {
+			snapshot()
+		}
+		done <- 1
+	})
+
+	b.Handle("/reboot", func(m *tb.Message) {
+		<-done
+		if m.Sender.ID == *adminParam {
+			res := C.HReboot(user)
+			if int(res) > 0 {
+				b.Send(m.Sender, "Rebooting! Wait 10 sec.")
+				time.Sleep(10 * time.Second)
+				for Login() < 1 {
+					b.Send(m.Sender, "Wait 3 sec.")
+					time.Sleep(3 * time.Second)
+				}
+				b.Send(m.Sender, "Camera online.")
+			} else {
+				b.Send(m.Sender, fmt.Sprintf("Fail [%d].", res))
+			}
+		}
+		done <- 1
+	})
+
 	go func() {
 		for {
 			i := <-motions
 			if i.AlarmType == 3 {
-				fname := fmt.Sprintf("/tmp/%s.jpeg", i.IP)
-				C.HCaptureImage(user, byStartChan, C.CString(fname))
-				p := &tb.Photo{File: tb.FromDisk(fname)}
-				b.SendAlbum(admin, tb.Album{p})
+				snapshot()
 			} else {
 				log.Println(i)
 			}
@@ -106,7 +154,18 @@ func bot(user C.int, byStartChan C.int) {
 	b.Start()
 }
 
+func Login() int {
+	user = C.HLogin(C.CString(*ipParam), C.CString(*userParam), C.CString(*passParam), &dev)
+	if int(user) > -1 {
+		C.OnAlarm(user, C.int(*alarmParam))
+		return int(user)
+	} else {
+		return int(user)
+	}
+}
+
 func main() {
+	log.Println("HIKBOT " + appid.String())
 	flag.Parse()
 	if *ipParam == "" || *userParam == "" || *passParam == "" || *adminParam == 0 || *tkeyParam == "" {
 		flag.PrintDefaults()
@@ -114,14 +173,12 @@ func main() {
 		motions = make(chan AlarmItem, 100)
 
 		cs := C.CString("")
-		dev := C.DevInfo{byStartChan: 0}
+
 		C.HVersion(cs)
 		log.Printf("%s\n", C.GoString(cs))
-		user := C.HLogin(C.CString(*ipParam), C.CString(*userParam), C.CString(*passParam), &dev)
-		if int(user) > -1 {
-			C.OnAlarm(user)
+		if Login() > -1 {
 			defer C.HLogout(user)
-			bot(user, dev.byStartChan)
+			bot()
 		} else {
 			log.Println("Error login.")
 		}
