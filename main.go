@@ -26,11 +26,15 @@ import "C"
 import (
 	"flag"
 	"fmt"
+	"image"
 	"log"
 	"os"
 	"strconv"
 	"time"
 	"unsafe"
+
+	"image/draw"
+	"image/jpeg"
 
 	"github.com/google/uuid"
 	tb "gopkg.in/tucnak/telebot.v2"
@@ -84,6 +88,34 @@ func onmessage(command C.int, ip *C.char, data *C.char, ln C.uint) C.int {
 	return 1
 }
 
+func drawBoxes(fname string) error {
+	f, err := os.Open(fname)
+	if err == nil {
+		return err
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return err
+	}
+
+	draw.Draw(img, image.Rect(10, 10, 200, 200), img, image.ZP, draw.Src)
+	// f, err := os.Create("outimage.jpg")
+	// if err != nil {
+	// 	return err
+	// }
+	// defer f.Close()
+
+	opt := jpeg.Options{
+		Quality: 100,
+	}
+	err = jpeg.Encode(f, img, &opt)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func bot() {
 
 	done := make(chan int, 1)
@@ -104,6 +136,16 @@ func bot() {
 		fname := fmt.Sprintf("/tmp/%s.jpeg", uuid.Must(uuid.NewRandom()).String())
 		err := C.HCaptureImage(user, dev.byStartChan, C.CString(fname))
 		if err > -1 {
+			f, err := os.Open(fname)
+			if err == nil {
+				// Handle error
+			}
+			defer f.Close()
+			img, fmtName, err := image.Decode(f)
+			if err != nil {
+				// Handle error
+			}
+
 			p := &tb.Photo{File: tb.FromDisk(fname)}
 			b.SendAlbum(admin, tb.Album{p})
 			os.Remove(fname)
