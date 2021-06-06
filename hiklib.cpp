@@ -1,9 +1,12 @@
 #include <stdio.h>
 
 #include <cstring>
-
+#include <chrono>
 #include "HCNetSDK.h"
 #include "hiklib.h"
+#include "stdlib.h"
+
+using namespace std::chrono;
 
 unsigned int HVersion(char *ret)
 {
@@ -29,7 +32,8 @@ int HLogin(char *ip, char *username, char *password, struct DevInfo *devinfo)
 
   int lUserID = NET_DVR_Login_V40(&struLoginInfo, &struDeviceInfoV40);
 
-  if (lUserID < 0) {
+  if (lUserID < 0)
+  {
     int err = NET_DVR_GetLastError();
     printf("\n\nError %d\n\n", err);
     NET_DVR_Cleanup();
@@ -47,6 +51,46 @@ void HLogout(int lUserID)
   NET_DVR_Cleanup();
 }
 
+int HMotionArea(int lUserID, struct MotionAreas *areas)
+{
+  int iChannelNO = 1;
+  int iRet;
+
+  //1.Get picture params.
+  DWORD uiReturnLen;
+  NET_DVR_PICCFG_V40 struParams = {0};
+  struParams.dwSize = sizeof(NET_DVR_PICCFG_V40);
+  iRet = NET_DVR_GetDVRConfig(lUserID, NET_DVR_GET_PICCFG_V40, iChannelNO, &struParams, sizeof(NET_DVR_PICCFG_V40), &uiReturnLen);
+  if (!iRet)
+  {
+    printf("NET_DVR_GET_PICCFG_V40 %d error.\n", NET_DVR_GetLastError());
+    return 2;
+  }
+  // printf("Channel %d Name is %s.\n", iChannelNO, struParams.sChanName);
+
+  // printf("Motion enable %d.\n", struParams.struMotion.byEnableHandleMotion);
+  // printf("Motion detection mode %d.\n", struParams.struMotion.byConfigurationMode);
+  // printf("Motion enable highlight display %d.\n", struParams.struMotion.byEnableDisplay);
+  if (struParams.struMotion.byConfigurationMode > 0)
+  {
+    auto st = struParams.struMotion.struMotionMode.struMotionMultiArea;
+    for (int i = 0; i < 8; i++)
+    {
+      auto area = st.struMotionMultiAreaParam[i];
+      if (area.byAreaNo && area.struRect.fHeight)
+      {
+        areas->areas[i].x = area.struRect.fX;
+        areas->areas[i].y = area.struRect.fY;
+        areas->areas[i].w = area.struRect.fWidth;
+        areas->areas[i].h = area.struRect.fHeight;
+        // printf("Motion area %d.\n", area.byAreaNo);
+        // printf("Motion height [%f,%f] %fx%f.\n", area.struRect.fX, area.struRect.fY, area.struRect.fWidth, area.struRect.fHeight);
+      }
+    }
+  }
+  return iRet;
+}
+
 int HCaptureImage(int lUserID, int byStartChan, char *imagePath)
 {
   printf("Capture image to [%s].\n", imagePath);
@@ -55,8 +99,9 @@ int HCaptureImage(int lUserID, int byStartChan, char *imagePath)
   strPicPara.wPicSize = 0xff;
   int iRet;
   iRet = NET_DVR_CaptureJPEGPicture(lUserID, byStartChan, &strPicPara, imagePath);
-  if (!iRet) {
-    return 0-NET_DVR_GetLastError();
+  if (!iRet)
+  {
+    return 0 - NET_DVR_GetLastError();
   }
   return iRet;
 }
@@ -72,26 +117,186 @@ int HListenAlarm(long lUserID,
                  int (*fMessCallBack)(int lCommand,
                                       char *sDVRIP,
                                       char *pBuf,
-                                      unsigned int dwBufLen))  // BOOL(CALLBACK *fMessCallBack)(LONG lCommand, char *sDVRIP, char *pBuf, DWORD dwBufLen))
+                                      unsigned int dwBufLen)) // BOOL(CALLBACK *fMessCallBack)(LONG lCommand, char *sDVRIP, char *pBuf, DWORD dwBufLen))
 {
   NET_DVR_SetDVRMessCallBack(fMessCallBack);
-  if (NET_DVR_StartListen(NULL, alarmport)) {
+  if (NET_DVR_StartListen(NULL, alarmport))
+  {
     printf("Start listen\n");
     LONG m_alarmHandle = NET_DVR_SetupAlarmChan(lUserID);
-    if (m_alarmHandle < -1) {
+    if (m_alarmHandle < -1)
+    {
       return 0 - NET_DVR_GetLastError();
-    } else {
+    }
+    else
+    {
       return m_alarmHandle;
     }
-  } else {
+  }
+  else
+  {
     printf("\n\nError start alarmlisten\n\n");
     return -1;
   }
 }
 
-int HReboot(int user) {
-    if (NET_DVR_RebootDVR(user) < 1) {
-        return 0 - NET_DVR_GetLastError();
-    }
+int HReboot(int user)
+{
+  if (NET_DVR_RebootDVR(user) < 1)
+  {
+    return 0 - NET_DVR_GetLastError();
+  }
+  return 1;
+}
+
+int HListVideo(int lUserID, struct MotionVideos *videos)
+{
+  printf("List video.\n");
+
+  auto now = system_clock::now();
+  time_t tt = system_clock::to_time_t(now);
+  tm local_tm = *localtime(&tt);
+
+  printf("%d\n", local_tm.tm_year);
+
+  NET_DVR_FILECOND_V50 m_struFileCondV50;
+  memset(&m_struFileCondV50, 0, sizeof(NET_DVR_FILECOND_V50));
+  m_struFileCondV50.struStreamID.dwChannel = 1;
+  // m_struFileCondV50.dwFileType = 0xff;
+  m_struFileCondV50.dwFileType = 255;
+
+  m_struFileCondV50.struStartTime.wYear = local_tm.tm_year + 1900;
+  m_struFileCondV50.struStartTime.byMonth = local_tm.tm_mon + 1;
+  m_struFileCondV50.struStartTime.byDay = 1;
+  m_struFileCondV50.struStartTime.byHour = 0;
+  m_struFileCondV50.struStartTime.byMinute = 0;
+  m_struFileCondV50.struStartTime.bySecond = 0;
+
+  m_struFileCondV50.struStopTime.wYear = local_tm.tm_year + 1900;
+  m_struFileCondV50.struStopTime.byMonth = local_tm.tm_mon + 1;
+  m_struFileCondV50.struStopTime.byDay = local_tm.tm_mday;
+  m_struFileCondV50.struStopTime.byHour = 23;
+  m_struFileCondV50.struStopTime.byMinute = 59;
+  m_struFileCondV50.struStopTime.bySecond = 59;
+
+  int lFindHandle = NET_DVR_FindFile_V50(lUserID, &m_struFileCondV50);
+
+  if (lFindHandle < 0)
+  {
+    printf("find file fail,last error %d\n", NET_DVR_GetLastError());
     return 1;
+  }
+  NET_DVR_FINDDATA_V50 struFileData;
+
+  int count = 0;
+  while (true)
+  {
+    int result = NET_DVR_FindNextFile_V50(lFindHandle, &struFileData);
+    if (result == NET_DVR_ISFINDING)
+    {
+      continue;
+    }
+    else if (result == NET_DVR_FILE_SUCCESS)
+    {
+      videos->videos[count].filename = (char *)malloc(sizeof(char) * (100 + 1));
+      strcpy(videos->videos[count].filename, struFileData.sFileName);
+      videos->videos[count].size = struFileData.dwFileSize;
+      videos->videos[count].from_year = struFileData.struStartTime.wYear;
+      videos->videos[count].from_month = struFileData.struStartTime.byMonth;
+      videos->videos[count].from_day = struFileData.struStartTime.byDay;
+      videos->videos[count].from_hour = struFileData.struStartTime.byHour;
+      videos->videos[count].from_min = struFileData.struStartTime.byMinute;
+      videos->videos[count].from_sec = struFileData.struStartTime.bySecond;
+      videos->videos[count].to_year = struFileData.struStopTime.wYear;
+      videos->videos[count].to_month = struFileData.struStopTime.byMonth;
+      videos->videos[count].to_day = struFileData.struStopTime.byDay;
+      videos->videos[count].to_hour = struFileData.struStopTime.byHour;
+      videos->videos[count].to_min = struFileData.struStopTime.byMinute;
+      videos->videos[count].to_sec = struFileData.struStopTime.bySecond;
+      count++;
+      videos->count = count;
+
+      // printf(
+      //     "%d:%s, [%db] %d-%d-%d %d:%d:%d -- %d-%d-%d %d:%d:%d.\n", count,
+      //     struFileData.sFileName, struFileData.dwFileSize,
+      //     struFileData.struStartTime.wYear, struFileData.struStartTime.byMonth,
+      //     struFileData.struStartTime.byDay, struFileData.struStartTime.byHour,
+      //     struFileData.struStartTime.byMinute,
+      //     struFileData.struStartTime.bySecond, struFileData.struStopTime.wYear,
+      //     struFileData.struStopTime.byMonth, struFileData.struStopTime.byDay,
+      //     struFileData.struStopTime.byHour, struFileData.struStopTime.byMinute,
+      //     struFileData.struStopTime.bySecond);
+      // break;
+      continue;
+    }
+    else if (result == NET_DVR_FILE_NOFIND || result == NET_DVR_NOMOREFILE)
+    {
+      printf("No more files!\n");
+      break;
+    }
+    else
+    {
+      printf("find file fail for illegal get file state\n");
+      break;
+    }
+
+    NET_DVR_FindClose_V30(lFindHandle);
+  }
+
+  return 0;
+}
+
+int HSaveFile(int userId, char *srcfile, char *destfile)
+{
+  printf("Save %s\n", srcfile);
+  int bRes = 1;
+
+  int hPlayback = 0;
+  if ((hPlayback = NET_DVR_GetFileByName(userId, srcfile, destfile)) < 0)
+  {
+    printf("GetFileByName failed. error[%d]\n", NET_DVR_GetLastError());
+    bRes = -1;
+    return bRes;
+  }
+
+  if (!NET_DVR_PlayBackControl(hPlayback, NET_DVR_PLAYSTART, 0, NULL))
+  {
+    printf("play back control failed [%d]\n", NET_DVR_GetLastError());
+    bRes = -1;
+    return bRes;
+  }
+
+  int pos = 0;
+  int lastpos = 0;
+  for (pos = 0; pos < 100 && pos >= 0;
+       pos = NET_DVR_GetDownloadPos(hPlayback))
+  {
+    if (lastpos != pos)
+    {
+      printf("%d%\r", pos);
+      fflush(stdout);
+      lastpos = pos;
+    }
+  }
+  printf("\n");
+
+  if (!NET_DVR_StopGetFile(hPlayback))
+  {
+    printf("failed to stop get file [%d]\n", NET_DVR_GetLastError());
+    bRes = -1;
+    return bRes;
+  }
+
+  printf("%s\n", destfile);
+
+  if (pos < 0 || pos > 100)
+  {
+    printf("download err [%d]\n", NET_DVR_GetLastError());
+    bRes = -1;
+    return bRes;
+  }
+  else
+  {
+    return 0;
+  }
 }

@@ -1,2 +1,4 @@
 runlocal.sh
 docker_*.sh
+data
+test
