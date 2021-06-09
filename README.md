@@ -16,8 +16,8 @@ HIKUTILDIR=/hdd/hikutil/ LD_LIBRARY_PATH=/hdd/EN-HCNetSDKV6.1.6.3_build20200925_
 
 ```/mareas``` - show motion areas.
 
-[Motion events](imgs/event.png)
+![Motion events](imgs/event.png?raw=true)
 
-[Motion areas](imgs/mareas.png)
+![Motion areas](imgs/mareas.png?raw=true)
 
-[Video list](imgs/video.png)
+![Video list](imgs/video.png?raw=true)
