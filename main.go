@@ -41,7 +41,6 @@ import (
 	"unsafe"
 
 	"github.com/google/uuid"
-	"github.com/sarjsheff/hikbot/tmod"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 	tb "gopkg.in/tucnak/telebot.v2"
 )
@@ -358,7 +357,6 @@ func Login() int {
 }
 
 func main() {
-	tmod.Tt()
 	log.Println("HIKBOT " + appid.String())
 	flag.Parse()
 	if *ipParam == "" || *userParam == "" || *passParam == "" || *adminParam == 0 || *tkeyParam == "" {
