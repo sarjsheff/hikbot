@@ -13,3 +13,5 @@ HIKUTILDIR=/hdd/hikutil/ LD_LIBRARY_PATH=/hdd/EN-HCNetSDKV6.1.6.3_build20200925_
 ```/reboot``` - reboot camera.
 
 ```/video``` - list saved video from camera with download command.
+
+```/mareas``` - show motion areas.
