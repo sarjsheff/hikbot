@@ -1,13 +1,12 @@
 package main
 
-//// #cgo LDFLAGS: /hdd/hikutil/hiklib.o
 // #include <stdio.h>
 // #include <stdlib.h>
 // #include "hiklib.h"
-// #include "hik.h"
 // #include <string.h>
 //
 // extern int onmessage(int command, char *sDVRIP, char *pBuf, unsigned int dwBufLen);
+// extern void onmessagev30(LONG lCommand, NET_DVR_ALARMER *pAlarmer, char *pAlarmInfo, DWORD dwBufLen, void* pUserData);
 //
 // static NET_DVR_ALARMINFO_V30 getalarminfo(char *pAlarmInfo) {
 //    NET_DVR_ALARMINFO_V30 struAlarmInfo;
@@ -17,7 +16,8 @@ package main
 //
 // static void OnAlarm(int user,int alarmport) {
 //   printf("oalarm\n");
-//   HListenAlarm(user,alarmport,onmessage);
+//   HListenAlarmV30(user,alarmport,onmessagev30);
+//   //HListenAlarm(user,alarmport,onmessage);
 // }
 // static void myprint(char* s) {
 //   printf("%s\n", s);
@@ -81,6 +81,24 @@ type MotionArea struct{ x, y, w, h float32 }
 
 func (t touser) Recipient() string {
 	return string(t)
+}
+
+//export onmessagev30
+func onmessagev30(command C.int, pAlarmer *C.NET_DVR_ALARMER, pAlarmInfo *C.char, dwBufLen C.uint, pUserData unsafe.Pointer) {
+	i := AlarmItem{IP: C.GoString(&pAlarmer.sDeviceIP[0]), Command: int(command)}
+	switch int(command) {
+	case COMM_ALARM_V30:
+		log.Println("ALARM")
+		i.AlarmType = int(C.getalarminfo(pAlarmInfo).dwAlarmType)
+		motions <- i
+		break
+	case COMM_DEV_STATUS_CHANGED:
+		log.Printf("COMM_DEV_STATUS_CHANGED")
+		break
+	default:
+		log.Printf("Unknown Alarm [0x%x] !!!", command)
+	}
+
 }
 
 //export onmessage
@@ -357,7 +375,7 @@ func Login() int {
 }
 
 func main() {
-	log.Println("HIKBOT " + appid.String())
+	log.Println("HIKBOT v0.0.4-dev")
 	flag.Parse()
 	if *ipParam == "" || *userParam == "" || *passParam == "" || *adminParam == 0 || *tkeyParam == "" {
 		flag.PrintDefaults()

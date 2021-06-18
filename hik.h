@@ -37,3 +37,32 @@ typedef struct
     BYTE byDiskNumber[MAX_DISKNUM_V30]; //When dwAlarmType is 1, 4 or 5,  it stands for Hard Disk,  dwDiskNumber[0] is the first disk
 }NET_DVR_ALARMINFO_V30, *LPNET_DVR_ALARMINFO_V30;
 
+#define SERIALNO_LEN                48      //SN length
+#define NAME_LEN                    32      //Username length
+#define MACADDR_LEN                    6       //Length of MAC address
+
+//Alarm Device Infor
+typedef struct
+{
+    BYTE byUserIDValid;                  /* Whether userID is valid,  0- invalid 1- valid. */
+    BYTE bySerialValid;                  /* Whether serial number is valid,  0- invalid 1- valid.  */
+    BYTE byVersionValid;                 /* Whether version number is valid,  0- invalid 1- valid. */
+    BYTE byDeviceNameValid;              /* Whether device name is valid,  0- invalid 1- valid. */
+    BYTE byMacAddrValid;                 /* Whether MAC address is valid,  0- invalid 1- valid. */
+    BYTE byLinkPortValid;                /* Whether login port number is valid,  0- invalid 1- valid. */
+    BYTE byDeviceIPValid;                /* Whether device IP is valid,  0- invalid 1- valid.*/
+    BYTE bySocketIPValid;                /* Whether socket IP is valid,  0- invalid 1- valid. */
+    LONG lUserID;                        /* NET_DVR_Login () effective when establishing alarm upload channel*/
+    BYTE sSerialNumber[SERIALNO_LEN];     /* Serial number. */
+    DWORD dwDeviceVersion;                 /* Version number,  2 high byte means the major version,  2 low byte means the minor version*/
+    char sDeviceName[NAME_LEN];             /* Device name. */
+    BYTE byMacAddr[MACADDR_LEN];         /* MAC address */
+    WORD wLinkPort;                      /* link port */
+    char sDeviceIP[128];                 /* IP address */
+    char sSocketIP[128];                 /* alarm push- mode socket IP address. */
+    BYTE byIpProtocol;                   /* IP protocol:  0- IPV4;  1- IPV6. */
+    BYTE byRes1[2];
+    BYTE bJSONBroken;                   //JSON Broken flag 0-not transmit 1-transmit
+    WORD wSocketPort;
+    BYTE byRes2[6];
+}NET_DVR_ALARMER, *LPNET_DVR_ALARMER;

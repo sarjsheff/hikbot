@@ -112,6 +112,47 @@ BOOL CALLBACK OnMessage(int lCommand, char *sDVRIP, char *pBuf, DWORD dwBufLen)
   return true;
 }
 
+void AlarmMessageCallBack_V30(LONG lCommand, NET_DVR_ALARMER *pAlarmer, char *pAlarmInfo, DWORD dwBufLen, void* pUserData)
+{
+  printf("OnMessage_V30 %d\n", lCommand);
+}
+
+
+int HListenAlarmV30(long lUserID,int alarmport,void (*AlarmCallback)(LONG lCommand, NET_DVR_ALARMER *pAlarmer, char *pAlarmInfo, DWORD dwBufLen, void* pUserData)) {
+  
+  printf("Register callback\n");
+  LONG lHandle;
+  lHandle = NET_DVR_SetDVRMessageCallBack_V30(AlarmCallback,NULL);
+	if (lHandle < 0)
+	{
+		printf("NET_DVR_SetDVRMessageCallBack_V30 error, %d\n", NET_DVR_GetLastError());
+		return -1;
+	}
+
+	// lHandle = NET_DVR_StartListen_V30(NULL,alarmport, AlarmCallback, NULL);
+	// if (lHandle < 0)
+	// {
+	// 	printf("NET_DVR_StartListen_V30 error, %d\n", NET_DVR_GetLastError());
+	// 	return -1;
+	// } else {
+  NET_DVR_SETUPALARM_PARAM struSetupParam={0}; 
+  struSetupParam.dwSize=sizeof(NET_DVR_SETUPALARM_PARAM);
+  //Alarm information type to upload: 0-History Alarm (NET_DVR_PLATE_RESULT), 1-Real-Time Alarm (NET_ITS_PLATE_RESULT)
+  struSetupParam.byAlarmInfoType=1;
+  //Arming Level: Level-2 arming (for traffic device) struSetupParam.byLevel=1;
+
+    lHandle = NET_DVR_SetupAlarmChan_V41(lUserID,&struSetupParam);
+    //lHandle = NET_DVR_SetupAlarmChan_V30(lUserID);
+    if (lHandle < 0)
+    {
+      printf("NET_DVR_SetupAlarmChan_V30 error, %d\n", NET_DVR_GetLastError());
+      return -1;
+    }
+  // }
+	return 0;
+
+}
+
 int HListenAlarm(long lUserID,
                  int alarmport,
                  int (*fMessCallBack)(int lCommand,
@@ -120,6 +161,7 @@ int HListenAlarm(long lUserID,
                                       unsigned int dwBufLen)) // BOOL(CALLBACK *fMessCallBack)(LONG lCommand, char *sDVRIP, char *pBuf, DWORD dwBufLen))
 {
   NET_DVR_SetDVRMessCallBack(fMessCallBack);
+  //NET_DVR_SetDVRMessageCallBack_V30(fMessCallBack,&lUserID);
   if (NET_DVR_StartListen(NULL, alarmport))
   {
     printf("Start listen\n");
