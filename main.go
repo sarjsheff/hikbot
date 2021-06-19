@@ -411,7 +411,7 @@ func Login() int {
 }
 
 func main() {
-	log.Println("HIKBOT v0.0.4-dev")
+	log.Println("HIKBOT v0.0.4")
 	flag.Parse()
 	if *ipParam == "" || *userParam == "" || *passParam == "" || *adminParam == 0 || *tkeyParam == "" {
 		flag.PrintDefaults()
