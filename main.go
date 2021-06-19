@@ -14,10 +14,11 @@ package main
 //    return struAlarmInfo;
 // }
 //
-// static void OnAlarm(int user,int alarmport) {
-//   printf("oalarm\n");
+// static void OnAlarmV30(int user,int alarmport) {
 //   HListenAlarmV30(user,alarmport,onmessagev30);
-//   //HListenAlarm(user,alarmport,onmessage);
+// }
+// static void OnAlarm(int user,int alarmport) {
+//   HListenAlarm(user,alarmport,onmessage);
 // }
 // static void myprint(char* s) {
 //   printf("%s\n", s);
@@ -55,9 +56,12 @@ var passParam = flag.String("p", "", "Password.")
 var tkeyParam = flag.String("t", "", "Telegram key.")
 var adminParam = flag.Int("a", 0, "Telegram userid.")
 var alarmParam = flag.Int("b", 7200, "Alarm port.")
+
 var datadirParam = flag.String("d", "/tmp", "Data dir, default: /tmp .")
 var previewsizeParam = flag.Int("s", 20000000, "Video preview byte size.")
 var zParam = flag.Int("z", 2, "Video preview rescale (divide).")
+
+var x1Param = flag.Bool("x1", false, "Issue 1.")
 
 type AlarmItem struct {
 	IP        string
@@ -142,10 +146,11 @@ func bot() {
 	// var btnSettings = menu.Data("⚙", "Settings")
 	video := func() {
 		var v = C.MotionVideos{}
+		mm, _ := b.Send(admin, "Fetch video from camera...")
 		C.HListVideo(user, &v)
-
-		txt := ""
-		for i := 0; i < int(v.count); i++ {
+		b.Edit(mm, strconv.Itoa(int(v.count))+" video on camera.")
+		txt := "Last 10 video:\n"
+		for i := 0; i < int(v.count) && i < 10; i++ {
 			dt := time.Date(int(v.videos[i].from_year), time.Month(int(v.videos[i].from_month)), int(v.videos[i].from_day), int(v.videos[i].from_hour), int(v.videos[i].from_min), int(v.videos[i].from_sec), 0, time.UTC)
 			todt := time.Date(int(v.videos[i].to_year), time.Month(int(v.videos[i].to_month)), int(v.videos[i].to_day), int(v.videos[i].to_hour), int(v.videos[i].to_min), int(v.videos[i].to_sec), 0, time.UTC)
 			txt = txt + "<b>" + dt.Format("2006-01-02 15:04:05") + " - " + todt.Format("15:04:05") + "</b> /dl_" + C.GoString(v.videos[i].filename) + " \n"
@@ -153,7 +158,11 @@ func bot() {
 		}
 		// menu.Inline(menu.Row(btnSettings))
 		// b.Send(admin, txt, &tb.SendOptions{ReplyMarkup: menu, ParseMode: tb.ModeHTML})
-		b.Send(admin, txt, &tb.SendOptions{ParseMode: tb.ModeHTML})
+		log.Println("Send video list")
+		_, err = b.Send(admin, txt, &tb.SendOptions{ParseMode: tb.ModeHTML})
+		if err != nil {
+			log.Println(err)
+		}
 	}
 
 	snapshot := func(mareas bool) {
@@ -367,7 +376,11 @@ func bot() {
 func Login() int {
 	user = C.HLogin(C.CString(*ipParam), C.CString(*userParam), C.CString(*passParam), &dev)
 	if int(user) > -1 {
-		C.OnAlarm(user, C.int(*alarmParam))
+		if *x1Param {
+			C.OnAlarmV30(user, C.int(*alarmParam))
+		} else {
+			C.OnAlarm(user, C.int(*alarmParam))
+		}
 		return int(user)
 	} else {
 		return int(user)

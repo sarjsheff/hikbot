@@ -3,11 +3,8 @@
 extern "C"
 {
 #else
-  #include "hik.h"
-  // typedef void* NET_DVR_ALARMINFO_V30;
-  // typedef void* NET_DVR_ALARMER;
+#include "hik.h"
 #endif
-// #include "hik.h"
 
   typedef struct DevInfo
   {
@@ -34,7 +31,7 @@ extern "C"
 
   typedef struct MotionVideos
   {
-    MotionVideo videos[100];
+    MotionVideo videos[10000];
     int count;
   } MotionVideos;
 

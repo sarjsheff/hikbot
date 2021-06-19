@@ -161,7 +161,6 @@ int HListenAlarm(long lUserID,
                                       unsigned int dwBufLen)) // BOOL(CALLBACK *fMessCallBack)(LONG lCommand, char *sDVRIP, char *pBuf, DWORD dwBufLen))
 {
   NET_DVR_SetDVRMessCallBack(fMessCallBack);
-  //NET_DVR_SetDVRMessageCallBack_V30(fMessCallBack,&lUserID);
   if (NET_DVR_StartListen(NULL, alarmport))
   {
     printf("Start listen\n");

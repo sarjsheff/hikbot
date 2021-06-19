@@ -2,3 +2,4 @@ runlocal.sh
 docker_*.sh
 data
 test
+deploy.sh
