@@ -144,24 +144,34 @@ func bot() {
 
 	// var menu = &tb.ReplyMarkup{ResizeReplyKeyboard: true}
 	// var btnSettings = menu.Data("⚙", "Settings")
-	video := func() {
+	video := func(offset int, limit int) {
 		var v = C.MotionVideos{}
 		mm, _ := b.Send(admin, "Fetch video from camera...")
 		C.HListVideo(user, &v)
 		b.Edit(mm, strconv.Itoa(int(v.count))+" video on camera.")
-		txt := "Last 10 video:\n"
-		for i := 0; i < int(v.count) && i < 10; i++ {
-			dt := time.Date(int(v.videos[i].from_year), time.Month(int(v.videos[i].from_month)), int(v.videos[i].from_day), int(v.videos[i].from_hour), int(v.videos[i].from_min), int(v.videos[i].from_sec), 0, time.UTC)
-			todt := time.Date(int(v.videos[i].to_year), time.Month(int(v.videos[i].to_month)), int(v.videos[i].to_day), int(v.videos[i].to_hour), int(v.videos[i].to_min), int(v.videos[i].to_sec), 0, time.UTC)
-			txt = txt + "<b>" + dt.Format("2006-01-02 15:04:05") + " - " + todt.Format("15:04:05") + "</b> /dl_" + C.GoString(v.videos[i].filename) + " \n"
-			videolist[C.GoString(v.videos[i].filename)] = dt.Format("2006-01-02/15:04:05")
-		}
-		// menu.Inline(menu.Row(btnSettings))
-		// b.Send(admin, txt, &tb.SendOptions{ReplyMarkup: menu, ParseMode: tb.ModeHTML})
-		log.Println("Send video list")
-		_, err = b.Send(admin, txt, &tb.SendOptions{ParseMode: tb.ModeHTML})
-		if err != nil {
-			log.Println(err)
+		if v.count > 0 {
+			txt := ""
+			if offset == 0 {
+				txt = fmt.Sprintf("First %d video:\n", limit)
+			} else {
+				txt = fmt.Sprintf("%d video from %d :\n", limit, offset)
+			}
+			for i := offset - 1; i < int(v.count) && i < offset+limit-1; i++ {
+				dt := time.Date(int(v.videos[i].from_year), time.Month(int(v.videos[i].from_month)), int(v.videos[i].from_day), int(v.videos[i].from_hour), int(v.videos[i].from_min), int(v.videos[i].from_sec), 0, time.UTC)
+				todt := time.Date(int(v.videos[i].to_year), time.Month(int(v.videos[i].to_month)), int(v.videos[i].to_day), int(v.videos[i].to_hour), int(v.videos[i].to_min), int(v.videos[i].to_sec), 0, time.UTC)
+				txt = txt + "<b>" + dt.Format("2006-01-02 15:04:05") + " - " + todt.Format("15:04:05") + "</b> /dl_" + C.GoString(v.videos[i].filename) + " \n"
+				videolist[C.GoString(v.videos[i].filename)] = dt.Format("2006-01-02/15:04:05")
+			}
+			if offset+limit < int(v.count) {
+				txt = txt + fmt.Sprintf("<b>Next 10 video /video_%d_%d</b>\n", offset+limit, limit)
+			}
+			// menu.Inline(menu.Row(btnSettings))
+			// b.Send(admin, txt, &tb.SendOptions{ReplyMarkup: menu, ParseMode: tb.ModeHTML})
+
+			_, err = b.Send(admin, txt, &tb.SendOptions{ParseMode: tb.ModeHTML})
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 
@@ -232,7 +242,7 @@ func bot() {
 	b.Handle("/video", func(m *tb.Message) {
 		<-done
 		if m.Sender.ID == *adminParam {
-			video()
+			video(1, 10)
 		}
 		done <- 1
 	})
@@ -273,6 +283,7 @@ func bot() {
 	})
 
 	b.Handle(tb.OnText, func(m *tb.Message) {
+		<-done
 		if m.Sender.ID == *adminParam {
 			if strings.HasPrefix(m.Text, "/dl_") {
 				mm, _ := b.Send(admin, "Loading...")
@@ -354,8 +365,20 @@ func bot() {
 				} else {
 					b.Send(admin, "Not found.")
 				}
+			} else if strings.HasPrefix(m.Text, "/video_") {
+				args := strings.Split(m.Text[7:], "_")
+				if len(args) > 1 {
+					offset, err := strconv.Atoi(args[0])
+					if err == nil {
+						limit, err := strconv.Atoi(args[1])
+						if err == nil && offset > -1 && limit > 0 {
+							video(offset, limit)
+						}
+					}
+				}
 			}
 		}
+		done <- 1
 	})
 
 	go func() {
