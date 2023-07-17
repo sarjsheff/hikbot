@@ -28,6 +28,7 @@ var passParam = flag.String("p", "", "Password.")
 var tkeyParam = flag.String("t", "", "Telegram key.")
 var adminParam = flag.Int("a", 0, "Telegram userid.")
 var alarmParam = flag.Int("b", 7200, "Alarm port.")
+var hikportParam = flag.Int("y", 8000, "Hikvision api port.")
 
 var datadirParam = flag.String("d", "/tmp", "Data dir, default: /tmp .")
 var previewsizeParam = flag.Int("s", 20000000, "Video preview byte size.")
@@ -122,7 +123,11 @@ func bot() {
 		//var v = hiklib.MotionVideos{} //C.MotionVideos{}
 		mm, _ := b.Send(admin, "Fetch video from camera...")
 		//C.HListVideo(C.int(user), &v)
-		_, v := hiklib.HikListVideo(user)
+		chno := dev.ByStartDChan
+		if dev.ByStartDChan == 0 {
+			chno = dev.ByStartChan
+		}
+		_, v := hiklib.HikListVideo(user, chno)
 		b.Edit(mm, strconv.Itoa(v.Count)+" video on camera.")
 		if v.Count > 0 {
 			txt := ""
@@ -152,13 +157,18 @@ func bot() {
 
 	snapshot := func(mareas bool) {
 		fname := filepath.Join(*datadirParam, fmt.Sprintf("%s.jpeg", uuid.Must(uuid.NewRandom()).String()))
-		err := hiklib.HikCaptureImage(user, dev.ByStartChan, fname)
+		err := -1
+		chno := dev.ByStartDChan
+		if dev.ByStartDChan == 0 {
+			chno = dev.ByStartChan
+		}
+		err = hiklib.HikCaptureImage(user, chno, fname)
 		if err > -1 {
 			caption := ""
 			if mareas {
 				// var ma = C.MotionAreas{}
 				// C.HMotionArea(C.int(user), &ma)
-				_, ma := hiklib.HikMotionArea(user)
+				_, ma := hiklib.HikMotionArea(user, chno)
 				col := color.RGBA{255, 0, 0, 128}
 				var dst *image.RGBA
 				var b image.Rectangle
@@ -234,6 +244,21 @@ func bot() {
 		<-done
 		if m.Sender.ID == *adminParam {
 			snapshot(false)
+		}
+		done <- 1
+	})
+
+	b.Handle("/info", func(m *tb.Message) {
+		<-done
+		if m.Sender.ID == *adminParam {
+			devtype := "Camera"
+			if dev.ByDVRType == 90 {
+				devtype = "NVR"
+			} else if dev.ByDVRType > 0 {
+				devtype = fmt.Sprintf("Unknown [%d]", dev.ByDVRType)
+			}
+
+			b.Send(m.Sender, fmt.Sprintf("SerialNumber: %s\nDisk count: %d\nDevice type: %s\nNVR channel count: %d", dev.SSerialNumber, dev.ByDiskNum, devtype, dev.ByDChanNum))
 		}
 		done <- 1
 	})
@@ -375,7 +400,7 @@ func bot() {
 
 func Login() int {
 	// user = C.HLogin(C.CString(*ipParam), C.CString(*userParam), C.CString(*passParam), &dev)
-	user, dev = hiklib.HikLogin(*ipParam, *userParam, *passParam)
+	user, dev = hiklib.HikLogin(*ipParam, *hikportParam, *userParam, *passParam)
 	if int(user) > -1 {
 		if *x1Param {
 			hiklib.HikOnAlarmV30(user, *alarmParam, func(item hiklib.AlarmItem) {
@@ -393,7 +418,7 @@ func Login() int {
 }
 
 func main() {
-	log.Println("HIKBOT v0.0.4")
+	log.Println("HIKBOT v0.0.5")
 	flag.Parse()
 	if *ipParam == "" || *userParam == "" || *passParam == "" || *adminParam == 0 || *tkeyParam == "" {
 		flag.PrintDefaults()
