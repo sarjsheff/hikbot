@@ -19,7 +19,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/sarjsheff/hiklib"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
-	tb "gopkg.in/tucnak/telebot.v2"
+
+	tb "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 var ipParam = flag.String("c", "", "Camera IP address.")
@@ -51,10 +52,9 @@ var appid uuid.UUID = uuid.Must(uuid.NewRandom())
 
 var motions chan hiklib.AlarmItem
 
-// var dev = C.DevInfo{byStartChan: 0}
-// var user = C.int(-1)
 var dev = hiklib.DevInfo{ByStartChan: 0}
 var user = -1
+var firstchno = 1
 
 type touser string
 type MotionArea struct{ x, y, w, h float32 }
@@ -106,29 +106,22 @@ func bot() {
 	done := make(chan int, 1)
 	done <- 1
 
-	admin := touser(strconv.Itoa(*adminParam))
-	b, err := tb.NewBot(tb.Settings{
-		Token:  *tkeyParam,
-		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
-	})
-
+	b, err := tb.NewBotAPI(*tkeyParam)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
 
-	// var menu = &tb.ReplyMarkup{ResizeReplyKeyboard: true}
-	// var btnSettings = menu.Data("⚙", "Settings")
 	video := func(offset int, limit int) {
-		//var v = hiklib.MotionVideos{} //C.MotionVideos{}
-		mm, _ := b.Send(admin, "Fetch video from camera...")
-		//C.HListVideo(C.int(user), &v)
+
+		mm, _ := b.Send(tb.NewMessage(int64(*adminParam), "Fetch video from camera..."))
 		chno := dev.ByStartDChan
 		if dev.ByStartDChan == 0 {
 			chno = dev.ByStartChan
 		}
 		_, v := hiklib.HikListVideo(user, chno)
-		b.Edit(mm, strconv.Itoa(v.Count)+" video on camera.")
+
+		b.Send(tb.NewEditMessageText(int64(*adminParam), mm.MessageID, strconv.Itoa(v.Count)+" video on camera."))
 		if v.Count > 0 {
 			txt := ""
 			if offset == 0 {
@@ -145,29 +138,23 @@ func bot() {
 			if offset+limit < v.Count {
 				txt = txt + fmt.Sprintf("<b>Next 10 video /video_%d_%d</b>\n", offset+limit, limit)
 			}
-			// menu.Inline(menu.Row(btnSettings))
-			// b.Send(admin, txt, &tb.SendOptions{ReplyMarkup: menu, ParseMode: tb.ModeHTML})
 
-			_, err = b.Send(admin, txt, &tb.SendOptions{ParseMode: tb.ModeHTML})
+			msg := tb.NewMessage(int64(*adminParam), txt)
+			msg.ParseMode = "HTML"
+			_, err = b.Send(msg)
 			if err != nil {
 				log.Println(err)
 			}
 		}
 	}
 
-	snapshot := func(mareas bool) {
+	snapshot := func(mareas bool, chno int) {
 		fname := filepath.Join(*datadirParam, fmt.Sprintf("%s.jpeg", uuid.Must(uuid.NewRandom()).String()))
 		err := -1
-		chno := dev.ByStartDChan
-		if dev.ByStartDChan == 0 {
-			chno = dev.ByStartChan
-		}
 		err = hiklib.HikCaptureImage(user, chno, fname)
 		if err > -1 {
 			caption := ""
 			if mareas {
-				// var ma = C.MotionAreas{}
-				// C.HMotionArea(C.int(user), &ma)
 				_, ma := hiklib.HikMotionArea(user, chno)
 				col := color.RGBA{255, 0, 0, 128}
 				var dst *image.RGBA
@@ -206,51 +193,80 @@ func bot() {
 					}
 				}
 			}
-			//p := &tb.Photo{File: tb.FromDisk(fname)}
-			//b.SendAlbum(admin, tb.Album{p})
-			p := &tb.Document{File: tb.FromDisk(fname), MIME: "image/jpeg", FileName: time.Now().Format(time.RFC3339) + ".jpeg"}
-			if caption != "" {
-				p.Caption = caption
-			}
-			b.Send(admin, p)
+
+			p := tb.NewDocument(int64(*adminParam), tb.FilePath(fname))
+			p.Caption = caption
+			b.Send(p)
 			os.Remove(fname)
 		} else {
-			b.Send(admin, fmt.Sprintf("Error get snapshot [%d].", err))
+			b.Send(tb.NewMessage(int64(*adminParam), fmt.Sprintf("Error get snapshot for channel [%d] error [%d].", chno, err)))
 		}
 	}
 
-	// On inline button pressed (callback)
-	// b.Handle(&btnSettings, func(c *tb.Callback) {
-	// 	b.Respond(c, &tb.CallbackResponse{Text: "testttt"})
-	// })
+	b.Debug = true
 
-	b.Handle("/video", func(m *tb.Message) {
+	log.Printf("Authorized on account %s", b.Self.UserName)
+
+	u := tb.NewUpdate(0)
+	u.Timeout = 60
+
+	updates := b.GetUpdatesChan(u)
+
+	go func() {
+		for {
+			i := <-motions
+			if i.AlarmType == 3 {
+				// TODO: get channel num
+				snapshot(false, firstchno)
+			} else {
+				log.Println(i)
+			}
+		}
+	}()
+
+	b.Send(tb.NewMessage(int64(*adminParam), "Bot restart!"))
+
+	for update := range updates {
+		if update.Message == nil {
+			continue
+		}
+
+		if !update.Message.IsCommand() {
+			continue
+		}
+
+		if update.SentFrom().ID != int64(*adminParam) {
+			continue
+		}
+
 		<-done
-		if m.Sender.ID == *adminParam {
+		switch update.Message.Command() {
+		case "video":
 			video(1, 10)
-		}
-		done <- 1
-	})
-
-	b.Handle("/mareas", func(m *tb.Message) {
-		<-done
-		if m.Sender.ID == *adminParam {
-			snapshot(true)
-		}
-		done <- 1
-	})
-
-	b.Handle("/snap", func(m *tb.Message) {
-		<-done
-		if m.Sender.ID == *adminParam {
-			snapshot(false)
-		}
-		done <- 1
-	})
-
-	b.Handle("/info", func(m *tb.Message) {
-		<-done
-		if m.Sender.ID == *adminParam {
+			break
+		case "mareas":
+			chno := firstchno
+			if chno, err = strconv.Atoi(update.Message.CommandArguments()); err == nil {
+				if chno > 1 && chno <= dev.ByDChanNum {
+					chno = firstchno + chno - 1
+				} else {
+					chno = firstchno
+				}
+			}
+			snapshot(true, chno)
+			break
+		case "snap":
+			chno := firstchno
+			if chno, err = strconv.Atoi(update.Message.CommandArguments()); err == nil {
+				if chno > 1 && chno <= dev.ByDChanNum {
+					chno = firstchno + chno - 1
+				} else {
+					chno = firstchno
+				}
+			}
+			snapshot(false, chno)
+			break
+		case "info":
 			devtype := "Camera"
 			if dev.ByDVRType == 90 {
 				devtype = "NVR"
@@ -258,42 +274,33 @@ func bot() {
 				devtype = fmt.Sprintf("Unknown [%d]", dev.ByDVRType)
 			}
 
-			b.Send(m.Sender, fmt.Sprintf("SerialNumber: %s\nDisk count: %d\nDevice type: %s\nNVR channel count: %d", dev.SSerialNumber, dev.ByDiskNum, devtype, dev.ByDChanNum))
-		}
-		done <- 1
-	})
-
-	b.Handle("/reboot", func(m *tb.Message) {
-		<-done
-		if m.Sender.ID == *adminParam {
+			b.Send(tb.NewMessage(int64(*adminParam), fmt.Sprintf("SerialNumber: %s\nDisk count: %d\nDevice type: %s\nNVR channel count: %d", dev.SSerialNumber, dev.ByDiskNum, devtype, dev.ByDChanNum)))
+			break
+		case "reboot":
 			res := hiklib.HikReboot(user)
 			if res > 0 {
-				b.Send(m.Sender, "Rebooting! Wait 10 sec.")
+				b.Send(tb.NewMessage(int64(*adminParam), "Rebooting! Wait 10 sec."))
 				time.Sleep(10 * time.Second)
 				for Login() < 1 {
-					b.Send(m.Sender, "Wait 3 sec.")
+					b.Send(tb.NewMessage(int64(*adminParam), "Wait 3 sec."))
 					time.Sleep(3 * time.Second)
 				}
-				b.Send(m.Sender, "Camera online.")
+				b.Send(tb.NewMessage(int64(*adminParam), "Camera online."))
 			} else {
-				b.Send(m.Sender, fmt.Sprintf("Fail [%d].", res))
+				b.Send(tb.NewMessage(int64(*adminParam), fmt.Sprintf("Fail [%d].", res)))
 			}
-		}
-		done <- 1
-	})
+			break
+		default:
+			if strings.HasPrefix(update.Message.Text, "/dl_") {
+				args := update.Message.Text[4:]
+				mm, _ := b.Send(tb.NewMessage(int64(*adminParam), "Loading..."))
+				log.Println(args)
 
-	b.Handle(tb.OnText, func(m *tb.Message) {
-		<-done
-		if m.Sender.ID == *adminParam {
-			if strings.HasPrefix(m.Text, "/dl_") {
-				mm, _ := b.Send(admin, "Loading...")
-				log.Println(m.Text[4:])
-
-				if filename, ok := videolist[m.Text[4:]]; ok {
+				if filename, ok := videolist[args]; ok {
 					os.MkdirAll(filepath.Join(*datadirParam, strings.Split(filename, "/")[0]), 0755)
 					fname := filepath.Join(*datadirParam, filename+".mpeg")
-					p := &tb.Video{}
 
+					p := tb.NewInputMediaVideo(tb.FilePath(fname + ".mp4"))
 					if _, err := os.Stat(fname); os.IsNotExist(err) {
 						opts := ffmpeg.KwArgs{
 							"format": "mp4",
@@ -304,14 +311,13 @@ func bot() {
 							"movflags": "+faststart",
 						}
 
-						// C.HSaveFile(C.int(user), C.CString(m.Text[4:]), C.CString(fname))
-						hiklib.HikSaveFile(user, m.Text[4:], fname)
-						b.Edit(mm, "Probing...")
+						hiklib.HikSaveFile(user, args, fname)
+						b.Send(tb.NewEditMessageText(int64(*adminParam), mm.MessageID, "Probing..."))
+
 						f, err := ffmpeg.Probe(fname)
 						var fjson FFProbe
 						err = json.Unmarshal([]byte(f), &fjson)
 						if err == nil {
-							// b.Send(admin, f)
 
 							p.Width = int(fjson.Streams[0]["width"].(float64))
 							p.Height = int(fjson.Streams[0]["height"].(float64))
@@ -332,8 +338,9 @@ func bot() {
 							}
 						} else {
 							log.Println(err)
+							b.Send(tb.NewEditMessageText(int64(*adminParam), mm.MessageID, "Probe error..."))
 						}
-						b.Edit(mm, "Transcoding ...")
+						b.Send(tb.NewEditMessageText(int64(*adminParam), mm.MessageID, "Transcoding ..."))
 						err = ffmpeg.Input(fname).
 							Output(fname+".mp4", opts).OverWriteOutput().
 							Run()
@@ -341,7 +348,7 @@ func bot() {
 							log.Println(err)
 						}
 					} else {
-						b.Edit(mm, "Probing...")
+						b.Send(tb.NewEditMessageText(int64(*adminParam), mm.MessageID, "Probing..."))
 						f, err := ffmpeg.Probe(fname)
 						var fjson FFProbe
 						err = json.Unmarshal([]byte(f), &fjson)
@@ -353,22 +360,20 @@ func bot() {
 						}
 					}
 
-					b.Edit(mm, "Sending...")
+					b.Send(tb.NewEditMessageText(int64(*adminParam), mm.MessageID, "Sending..."))
 
-					p.File = tb.FromDisk(fname + ".mp4")
-					p.FileName = "video.mp4"
+					v := tb.NewMediaGroup(int64(*adminParam), []interface{}{p})
 
-					b.Send(admin, p)
-					b.Delete(mm)
+					b.Send(v)
 					if *datadirParam == "/tmp" {
 						os.Remove(fname)
 						os.Remove(fname + ".mp4")
 					}
 				} else {
-					b.Send(admin, "Not found.")
+					b.Send(tb.NewMessage(int64(*adminParam), "Not found."))
 				}
-			} else if strings.HasPrefix(m.Text, "/video_") {
-				args := strings.Split(m.Text[7:], "_")
+			} else if strings.HasPrefix(update.Message.Text, "/video_") {
+				args := strings.Split(update.Message.Text[7:], "_")
 				if len(args) > 1 {
 					offset, err := strconv.Atoi(args[0])
 					if err == nil {
@@ -381,25 +386,11 @@ func bot() {
 			}
 		}
 		done <- 1
-	})
+	}
 
-	go func() {
-		for {
-			i := <-motions
-			if i.AlarmType == 3 {
-				snapshot(false)
-			} else {
-				log.Println(i)
-			}
-		}
-	}()
-
-	b.Send(admin, "Bot restart!")
-	b.Start()
 }
 
 func Login() int {
-	// user = C.HLogin(C.CString(*ipParam), C.CString(*userParam), C.CString(*passParam), &dev)
 	user, dev = hiklib.HikLogin(*ipParam, *hikportParam, *userParam, *passParam)
 	if int(user) > -1 {
 		if *x1Param {
@@ -411,6 +402,11 @@ func Login() int {
 				motions <- item
 			})
 		}
+		firstchno = dev.ByStartDChan
+		if dev.ByStartDChan == 0 {
+			firstchno = dev.ByStartChan
+		}
+
 		return int(user)
 	} else {
 		return int(user)
@@ -418,7 +414,7 @@ func Login() int {
 }
 
 func main() {
-	log.Println("HIKBOT v0.0.5")
+	log.Println("HIKBOT v0.0.6")
 	flag.Parse()
 	if *ipParam == "" || *userParam == "" || *passParam == "" || *adminParam == 0 || *tkeyParam == "" {
 		flag.PrintDefaults()
