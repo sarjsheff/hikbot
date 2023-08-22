@@ -1,4 +1,5 @@
 runlocal.sh
+buildlocal.sh
 docker_*.sh
 data
 test

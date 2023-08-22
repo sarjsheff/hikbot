@@ -112,13 +112,13 @@ func bot() {
 		return
 	}
 
-	video := func(offset int, limit int) {
+	video := func(offset int, limit int, chno int) {
 
 		mm, _ := b.Send(tb.NewMessage(int64(*adminParam), "Fetch video from camera..."))
-		chno := dev.ByStartDChan
-		if dev.ByStartDChan == 0 {
-			chno = dev.ByStartChan
-		}
+		// chno := dev.ByStartDChan
+		// if dev.ByStartDChan == 0 {
+		// 	chno = dev.ByStartChan
+		// }
 		_, v := hiklib.HikListVideo(user, chno)
 
 		b.Send(tb.NewEditMessageText(int64(*adminParam), mm.MessageID, strconv.Itoa(v.Count)+" video on camera."))
@@ -149,6 +149,7 @@ func bot() {
 	}
 
 	snapshot := func(mareas bool, chno int) {
+		log.Println("Snapshot from channel ",chno)
 		fname := filepath.Join(*datadirParam, fmt.Sprintf("%s.jpeg", uuid.Must(uuid.NewRandom()).String()))
 		err := -1
 		err = hiklib.HikCaptureImage(user, chno, fname)
@@ -217,7 +218,7 @@ func bot() {
 			i := <-motions
 			if i.AlarmType == 3 {
 				// TODO: get channel num
-				snapshot(false, firstchno)
+				snapshot(false, firstchno+1)
 			} else {
 				log.Println(i)
 			}
@@ -242,29 +243,13 @@ func bot() {
 		<-done
 		switch update.Message.Command() {
 		case "video":
-			video(1, 10)
+			video(1, 10, GetChannelNumber(update.Message.CommandArguments(),&dev))
 			break
 		case "mareas":
-			chno := firstchno
-			if chno, err = strconv.Atoi(update.Message.CommandArguments()); err == nil {
-				if chno > 1 && chno <= dev.ByDChanNum {
-					chno = firstchno + chno - 1
-				} else {
-					chno = firstchno
-				}
-			}
-			snapshot(true, chno)
+			snapshot(true, GetChannelNumber(update.Message.CommandArguments(),&dev))
 			break
 		case "snap":
-			chno := firstchno
-			if chno, err = strconv.Atoi(update.Message.CommandArguments()); err == nil {
-				if chno > 1 && chno <= dev.ByDChanNum {
-					chno = firstchno + chno - 1
-				} else {
-					chno = firstchno
-				}
-			}
-			snapshot(false, chno)
+			snapshot(false, GetChannelNumber(update.Message.CommandArguments(),&dev))
 			break
 		case "info":
 			devtype := "Camera"
@@ -315,6 +300,10 @@ func bot() {
 						b.Send(tb.NewEditMessageText(int64(*adminParam), mm.MessageID, "Probing..."))
 
 						f, err := ffmpeg.Probe(fname)
+						if err != nil {
+							b.Send(tb.NewEditMessageText(int64(*adminParam), mm.MessageID, err.Error()))
+							continue
+						}
 						var fjson FFProbe
 						err = json.Unmarshal([]byte(f), &fjson)
 						if err == nil {
@@ -379,7 +368,7 @@ func bot() {
 					if err == nil {
 						limit, err := strconv.Atoi(args[1])
 						if err == nil && offset > -1 && limit > 0 {
-							video(offset, limit)
+							video(offset, limit,GetChannelNumber(update.Message.CommandArguments(),&dev))
 						}
 					}
 				}
@@ -388,6 +377,17 @@ func bot() {
 		done <- 1
 	}
 
+}
+
+// Get channel number from argument
+func GetChannelNumber(arg string,dev *hiklib.DevInfo) int {
+	chno := firstchno + 1
+	if inchno, err := strconv.Atoi(arg); err == nil {
+		if inchno > 0 && inchno <= dev.ByDChanNum {
+			chno = firstchno + inchno
+		}
+	}
+	return chno
 }
 
 func Login() int {
@@ -403,9 +403,8 @@ func Login() int {
 			})
 		}
 		firstchno = dev.ByStartDChan
-		if dev.ByStartDChan == 0 {
-			firstchno = dev.ByStartChan
-		}
+
+		log.Println("First channel is",firstchno)
 
 		return int(user)
 	} else {
@@ -414,7 +413,7 @@ func Login() int {
 }
 
 func main() {
-	log.Println("HIKBOT v0.0.6")
+	log.Println("HIKBOT v0.0.7")
 	flag.Parse()
 	if *ipParam == "" || *userParam == "" || *passParam == "" || *adminParam == 0 || *tkeyParam == "" {
 		flag.PrintDefaults()
