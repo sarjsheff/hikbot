@@ -35,8 +35,13 @@ func main() {
 	}
 	defer client.Close()
 
-	golang := client.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).From("golang:1.19").WithWorkdir("/src").
-		WithDirectory("/src", client.Host().Directory(".")).
+	goCache := client.CacheVolume("go")
+
+	golang := client.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).From("golang:1.21").WithWorkdir("/src").
+		WithMountedCache("/go", goCache).
+		WithDirectory("/src", client.Host().Directory("."), dagger.ContainerWithDirectoryOpts{
+			Exclude: []string{"buildlocal.sh", "runlocal.sh", "ci/"},
+		}).
 		WithDirectory("/hiksdk", client.Host().Directory(*sdkFlag)).
 		WithEnvVariable("CGO_CXXFLAGS", "-I/hiksdk/incEn/").
 		WithEnvVariable("CGO_LDFLAGS", "-L/hiksdk/lib -lhcnetsdk").
@@ -49,10 +54,12 @@ func main() {
 	secret := client.SetSecret("password", *passwordFlag)
 
 	_, err = client.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).
-		From("debian").
+		From("debian:sid").
 		WithDirectory("/hiksdk", client.Host().Directory(*sdkFlag)).
-		WithFile("/bin/hikbot", golang.File("hikbot")).
+		WithFile("/usr/bin/hikbot", golang.File("hikbot")).
 		WithEnvVariable("LD_LIBRARY_PATH", "/hiksdk/lib").
+		WithExec([]string{"apt", "update"}).
+		WithExec([]string{"apt", "install", "-y", "ca-certificates"}).
 		WithEntrypoint([]string{"/bin/hikbot"}).
 		WithRegistryAuth(*regFlag, *userFlag, secret).
 		Publish(ctx, *imageFlag)
