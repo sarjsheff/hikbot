@@ -37,6 +37,8 @@ var zParam = flag.Int("z", 2, "Video preview rescale (divide).")
 
 var x1Param = flag.Bool("x1", false, "Issue 1.")
 
+var loglevelParam = flag.Int("l", 5, "Log level.")
+
 // type AlarmItem struct {
 // 	IP        string
 // 	Command   int
@@ -141,6 +143,16 @@ func bot() {
 
 			msg := tb.NewMessage(int64(*adminParam), txt)
 			msg.ParseMode = "HTML"
+
+			var numericKeyboard = tb.NewInlineKeyboardMarkup()
+
+			row := tb.NewInlineKeyboardRow()
+			for i := 0; i < v.Count/limit; i++ {
+				row = append(row, tb.NewInlineKeyboardButtonData(strconv.Itoa(i+1), fmt.Sprintf("/video_%d_%d", i*limit, i*limit+limit)))
+			}
+			numericKeyboard.InlineKeyboard = append(numericKeyboard.InlineKeyboard, row)
+
+			msg.ReplyMarkup = numericKeyboard
 			_, err = b.Send(msg)
 			if err != nil {
 				log.Println(err)
@@ -149,7 +161,7 @@ func bot() {
 	}
 
 	snapshot := func(mareas bool, chno int) {
-		log.Println("Snapshot from channel ",chno)
+		log.Println("Snapshot from channel ", chno)
 		fname := filepath.Join(*datadirParam, fmt.Sprintf("%s.jpeg", uuid.Must(uuid.NewRandom()).String()))
 		err := -1
 		err = hiklib.HikCaptureImage(user, chno, fname)
@@ -204,7 +216,7 @@ func bot() {
 		}
 	}
 
-	b.Debug = true
+	b.Debug = false
 
 	log.Printf("Authorized on account %s", b.Self.UserName)
 
@@ -228,6 +240,11 @@ func bot() {
 	b.Send(tb.NewMessage(int64(*adminParam), "Bot restart!"))
 
 	for update := range updates {
+		if update.CallbackQuery != nil {
+			log.Println(update.CallbackQuery.Data, update.CallbackQuery.InlineMessageID)
+			//b.Send(tb.NewEditMessageText(int64(*adminParam), update.CallbackQuery.InlineMessageID, "Inline..."))
+			continue
+		}
 		if update.Message == nil {
 			continue
 		}
@@ -243,13 +260,13 @@ func bot() {
 		<-done
 		switch update.Message.Command() {
 		case "video":
-			video(1, 10, GetChannelNumber(update.Message.CommandArguments(),&dev))
+			video(1, 10, GetChannelNumber(update.Message.CommandArguments(), &dev))
 			break
 		case "mareas":
-			snapshot(true, GetChannelNumber(update.Message.CommandArguments(),&dev))
+			snapshot(true, GetChannelNumber(update.Message.CommandArguments(), &dev))
 			break
 		case "snap":
-			snapshot(false, GetChannelNumber(update.Message.CommandArguments(),&dev))
+			snapshot(false, GetChannelNumber(update.Message.CommandArguments(), &dev))
 			break
 		case "info":
 			devtype := "Camera"
@@ -368,7 +385,7 @@ func bot() {
 					if err == nil {
 						limit, err := strconv.Atoi(args[1])
 						if err == nil && offset > -1 && limit > 0 {
-							video(offset, limit,GetChannelNumber(update.Message.CommandArguments(),&dev))
+							video(offset, limit, GetChannelNumber(update.Message.CommandArguments(), &dev))
 						}
 					}
 				}
@@ -380,7 +397,7 @@ func bot() {
 }
 
 // Get channel number from argument
-func GetChannelNumber(arg string,dev *hiklib.DevInfo) int {
+func GetChannelNumber(arg string, dev *hiklib.DevInfo) int {
 	chno := firstchno + 1
 	if inchno, err := strconv.Atoi(arg); err == nil {
 		if inchno > 0 && inchno <= dev.ByDChanNum {
@@ -391,7 +408,8 @@ func GetChannelNumber(arg string,dev *hiklib.DevInfo) int {
 }
 
 func Login() int {
-	user, dev = hiklib.HikLogin(*ipParam, *hikportParam, *userParam, *passParam)
+
+	user, dev = hiklib.HikLoginLog(*ipParam, *hikportParam, *userParam, *passParam, *loglevelParam)
 	if int(user) > -1 {
 		if *x1Param {
 			hiklib.HikOnAlarmV30(user, *alarmParam, func(item hiklib.AlarmItem) {
@@ -404,7 +422,7 @@ func Login() int {
 		}
 		firstchno = dev.ByStartDChan
 
-		log.Println("First channel is",firstchno)
+		log.Println("First channel is", firstchno)
 
 		return int(user)
 	} else {
@@ -413,7 +431,7 @@ func Login() int {
 }
 
 func main() {
-	log.Println("HIKBOT v0.0.7")
+	log.Println("HIKBOT v0.0.8")
 	flag.Parse()
 	if *ipParam == "" || *userParam == "" || *passParam == "" || *adminParam == 0 || *tkeyParam == "" {
 		flag.PrintDefaults()

@@ -55,11 +55,12 @@ func main() {
 
 	_, err = client.Container(dagger.ContainerOpts{Platform: "linux/amd64"}).
 		From("debian:sid").
+		WithExec([]string{"apt", "update"}).
+		WithExec([]string{"apt", "install", "-y", "ca-certificates"}).
+		WithExec([]string{"apt", "install", "-y", "ffmpeg"}).
 		WithDirectory("/hiksdk", client.Host().Directory(*sdkFlag)).
 		WithFile("/usr/bin/hikbot", golang.File("hikbot")).
 		WithEnvVariable("LD_LIBRARY_PATH", "/hiksdk/lib").
-		WithExec([]string{"apt", "update"}).
-		WithExec([]string{"apt", "install", "-y", "ca-certificates"}).
 		WithEntrypoint([]string{"/bin/hikbot"}).
 		WithRegistryAuth(*regFlag, *userFlag, secret).
 		Publish(ctx, *imageFlag)
