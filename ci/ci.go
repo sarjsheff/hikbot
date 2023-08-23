@@ -11,8 +11,8 @@ import (
 )
 
 var sdkFlag = flag.String("s", "", "Hikvision SDK")
-var imageFlag = flag.String("i", "", "Docker registry")
-var regFlag = flag.String("r", "", "Docker image")
+var imageFlag = flag.String("i", "", "Docker image")
+var regFlag = flag.String("r", "", "Docker registry")
 var userFlag = flag.String("u", "", "Registry username")
 var passwordFlag = flag.String("p", "", "Registry password")
 
